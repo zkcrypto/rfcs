@@ -1,4 +1,4 @@
-# zkcrypto RFCs - [RFC Book](https://zkcrypto.github.io/rfcs/)
+# zkcrypto RFCs - [RFC Book](https://zkcrypto.github.io/rfcs/) {#zkcrypto-rfcs}
 
 TBD
 
