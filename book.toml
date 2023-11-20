@@ -1,0 +1,17 @@
+[book]
+title = "The zkcrypto RFC Book"
+language = "en"
+
+[output.html]
+no-section-label = true
+git-repository-url = "https://github.com/zkcrypto/rfcs"
+site-url = "/rfcs/"
+
+[preprocessor.katex]
+renderers = ["html"]
+
+[output.html.playground]
+runnable = false
+
+[output.html.search]
+heading-split-level = 0
