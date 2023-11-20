@@ -3,7 +3,17 @@
 TBD
 
 
+## Table of Contents
+[Table of Contents]: #table-of-contents
+
+- [Opening](#zkcrypto-rfcs)
+- [Table of Contents]
+- [License]
+- [Contributions]
+
+
 ## License
+[License]: #license
 
 This repository is licensed under either of:
 
@@ -14,6 +24,7 @@ at your option.
 
 
 ### Contributions
+[Contributions]: #contributions
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
