@@ -56,17 +56,17 @@ The bound changes from `RngCore` to `Rng` (which is the new name for the same co
 
 **Migration:** Most call sites that pass `&mut rng` will continue to work. Call sites that pass an RNG by value (e.g. `Field::random(OsRng)`) will need to change to pass by reference (e.g. `Field::random(&mut OsRng)`). Since `OsRng` has been removed from `rand_core`, users should migrate to `getrandom::SysRng` (from the [`getrandom`](https://crates.io/crates/getrandom) crate) or equivalent.
 
-## `Field::try_from_rng` and `Group::try_from_rng` (new)
+## `Field::try_random` and `Group::try_random` (new)
 
 A new fallible method is introduced for random element generation:
 
 ```rust
-fn try_from_rng<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error>;
+fn try_random<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error>;
 ```
 
-This is now the *required* method of the trait; `random` becomes a *provided* method that delegates to `try_from_rng` and unwraps the infallible result. This enables use of fallible RNG sources (e.g. hardware RNGs that can fail) without panicking.
+This is now the *required* method of the trait; `random` becomes a *provided* method that delegates to `try_random` and unwraps the infallible result. This enables use of fallible RNG sources (e.g. hardware RNGs that can fail) without panicking.
 
-**For trait implementors:** You now implement `try_from_rng` instead of `random`. The `random` method has a default implementation that calls `try_from_rng` and handles the `Infallible` error case. Note that the bound on `try_from_rng` uses `TryRng` (renamed from `TryRngCore` in `rand_core 0.10`). Inside your implementation, RNG method calls also change to their fallible counterparts (e.g. `rng.next_u64()` becomes `rng.try_next_u64()?`).
+**For trait implementors:** You now implement `try_random` instead of `random`. The `random` method has a default implementation that calls `try_random` and handles the `Infallible` error case. Note that the bound on `try_random` uses `TryRng` (renamed from `TryRngCore` in `rand_core 0.10`). Inside your implementation, RNG method calls also change to their fallible counterparts (e.g. `rng.next_u64()` becomes `rng.try_next_u64()?`).
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -100,21 +100,21 @@ pub trait Field: /* ... */ {
     /// Provided method (infallible RNG).
     fn random<R: Rng + ?Sized>(rng: &mut R) -> Self {
         // `Rng: TryRng<Error = Infallible>`, so this is exhaustive.
-        let Ok(out) = Self::try_from_rng(rng);
+        let Ok(out) = Self::try_random(rng);
         out
     }
 
     /// Required method (fallible RNG).
-    fn try_from_rng<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error>;
+    fn try_random<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error>;
     // ...
 }
 ```
 
 Key details:
 - `random` changes from a **required** method to a **provided** method.
-- `try_from_rng` is the new **required** method that trait implementors must provide.
+- `try_random` is the new **required** method that trait implementors must provide.
 - The `?Sized` bound on `R` allows passing trait objects (e.g., `&mut dyn Rng`), which was not possible before.
-- `Rng` is an extension trait of `TryRng<Error = Infallible>`, so any infallible RNG satisfies the `TryRng` bound used by `try_from_rng`.
+- `Rng` is an extension trait of `TryRng<Error = Infallible>`, so any infallible RNG satisfies the `TryRng` bound used by `try_random`.
 
 ## `group` crate changes
 
@@ -140,14 +140,14 @@ pub trait Group: /* ... */ {
 // AFTER:
 pub trait Group: /* ... */ {
     fn random<R: Rng + ?Sized>(rng: &mut R) -> Self { /* default impl */ }
-    fn try_from_rng<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error>;
+    fn try_random<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error>;
     // ...
 }
 ```
 
 ## Downstream crate impact
 
-Downstream crates that implement `Field` or `Group` will need mechanical updates: each `random` implementation becomes a `try_from_rng` implementation, and call sites are updated to use the new signatures. Crates that transitively depend on `ff` or `group` without directly using `rand_core` types (e.g. `pairing`) only need a version bump. The zkcrypto-maintained downstream crates (`bls12_381`, `jubjub`, `pairing`) will receive corresponding updates as part of this effort.[^bls12-prototype]
+Downstream crates that implement `Field` or `Group` will need mechanical updates: each `random` implementation becomes a `try_random` implementation, and call sites are updated to use the new signatures. Crates that transitively depend on `ff` or `group` without directly using `rand_core` types (e.g. `pairing`) only need a version bump. The zkcrypto-maintained downstream crates (`bls12_381`, `jubjub`, `pairing`) will receive corresponding updates as part of this effort.[^bls12-prototype]
 
 ## Trait rename mapping (`rand_core 0.6` → `rand_core 0.10`)
 
@@ -167,7 +167,7 @@ Note: The `release-0.14.0` branches originally targeted `rand_core 0.9`; this RF
 
 - **MSRV jump from 1.56 to 1.85.** This is a significant MSRV increase (29 versions). However, `rand_core 0.10` hard-requires 1.85 (it uses the Rust 2024 edition), so there is no way to avoid this bump while upgrading. In practice, the primary downstream consumers (Zcash ecosystem, RustCrypto) already require 1.85.
 
-- **Breaking change for all downstream crates.** Every crate that implements `Field` or `Group` will need to update their implementations. However, the migration is mechanical (rename `random` to `try_from_rng`, update the signature), and the old `random` method continues to exist as a provided method with the same semantics.
+- **Breaking change for all downstream crates.** Every crate that implements `Field` or `Group` will need to update their implementations. However, the migration is mechanical (rename `random` to `try_random`, update the signature), and the old `random` method continues to exist as a provided method with the same semantics.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -180,9 +180,9 @@ We originally planned to upgrade to `rand_core 0.9` (see the `release-0.14.0` br
 - Releasing `ff` with `rand_core 0.9` would be ["nigh-unusable"](https://github.com/zkcrypto/ff/pull/130#issuecomment-3565178513) for downstream crates that also depend on RustCrypto trait crates, since those would require `rand_core 0.10`.
 - Performing a single breaking change (0.6 → 0.10) causes less ecosystem churn than two sequential breaking changes (0.6 → 0.9 → 0.10).
 
-## Why make `try_from_rng` the required method instead of `random`?
+## Why make `try_random` the required method instead of `random`?
 
-The `rand_core 0.9`/`0.10` design philosophy makes fallibility the primary interface, with infallible usage as a convenience wrapper. By making `try_from_rng` the required method:
+The `rand_core 0.9`/`0.10` design philosophy makes fallibility the primary interface, with infallible usage as a convenience wrapper. By making `try_random` the required method:
 
 - Implementors only need to write one implementation that works for both fallible and infallible RNGs.
 - The `random` method "just works" via the default implementation.
@@ -213,7 +213,7 @@ Not upgrading would leave the zkcrypto ecosystem unable to interoperate with the
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- **Removing the `random` convenience method.** In the long term, it may make sense to deprecate or remove `Field::random` / `Group::random` in favor of exclusively using `try_from_rng`, aligning fully with the `rand_core` design philosophy. However, this is not proposed in this RFC.
+- **Removing the `random` convenience method.** In the long term, it may make sense to deprecate or remove `Field::random` / `Group::random` in favor of exclusively using `try_random`, aligning fully with the `rand_core` design philosophy. However, this is not proposed in this RFC.
 
 - **Edition 2024 migration.** With MSRV 1.85, all crates could migrate to `edition = "2024"` in a follow-up release.
 
